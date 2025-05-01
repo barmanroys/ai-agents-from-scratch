@@ -1,0 +1,13 @@
+[project]
+name = "agentic-patterns"
+version = "0.1.0"
+description = "Agentic patterns"
+readme = "README.md"
+requires-python = "==3.12.8"
+dependencies = [
+    "colorama>=0.4.6",
+    "graphviz>=0.20.3",
+    "groq>=0.23.1",
+    "python-dotenv>=1.1.0",
+    "types-colorama>=0.4.15.20240311",
+]

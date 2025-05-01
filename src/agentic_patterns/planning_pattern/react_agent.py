@@ -160,7 +160,6 @@ class ReactAgent:
         if self.tools:
             # Run the ReAct loop for max_rounds
             for _ in range(max_rounds):
-
                 completion = completions_create(self.client, chat_history, self.model)
 
                 response = extract_tag_content(str(completion), "response")
