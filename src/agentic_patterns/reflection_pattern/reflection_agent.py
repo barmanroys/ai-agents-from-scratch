@@ -1,4 +1,5 @@
 """Generate an essay based on the reflection pattern."""
+
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -39,11 +40,11 @@ class ReflectionAgent:
         self.client: Groq = client
 
     def run(
-            self,
-            user_msg: str,
-            generation_system_prompt: str = "",
-            reflection_system_prompt: str = "",
-            n_steps: int = 10,
+        self,
+        user_msg: str,
+        generation_system_prompt: str = "",
+        reflection_system_prompt: str = "",
+        n_steps: int = 10,
     ) -> str:
         """
         Runs the ReflectionAgent over multiple steps, alternating between generating a response
@@ -66,29 +67,42 @@ class ReflectionAgent:
         # The `FixedFirstChatHistory` is a very simple class, that creates a Queue that always keeps
         # fixed the first message. I thought this would be useful for maintaining the system prompt
         # in the chat history.
+        total_length: int = 3
         generation_history: FixedFirstChatHistory = FixedFirstChatHistory(
-            messages=[build_prompt_structure(prompt=generation_system_prompt, role="system"),
-                      build_prompt_structure(prompt=user_msg, role="user"),
-                      ],
-            total_length=3,
+            messages=[
+                build_prompt_structure(prompt=generation_system_prompt, role="system"),
+                build_prompt_structure(prompt=user_msg, role="user"),
+            ],
+            total_length=total_length,
         )
-
-        reflection_history: FixedFirstChatHistory = FixedFirstChatHistory(messages=
-        [build_prompt_structure(
-            prompt=reflection_system_prompt,
-            role="system")],
-            total_length=3,
+        reflection_history: FixedFirstChatHistory = FixedFirstChatHistory(
+            messages=[
+                build_prompt_structure(prompt=reflection_system_prompt, role="system")
+            ],
+            total_length=total_length,
         )
         counter: int = 0
         while True:
             # Generate the response
-            generation = completions_create(self.client, generation_history, self.model)
-            generation_history.append(msg=build_prompt_structure(prompt=generation, role='assistant'))
-            reflection_history.append(msg=build_prompt_structure(prompt=generation, role='assistant'))
-            # Reflect and critique the generation
-            critique = completions_create(self.client, reflection_history, self.model)
+            generation: str = completions_create(
+                client=self.client, messages=generation_history, model=self.model
+            )
+            generation_history.append(
+                msg=build_prompt_structure(prompt=generation, role="assistant")
+            )
+            reflection_history.append(
+                msg=build_prompt_structure(prompt=generation, role="assistant")
+            )
+            # Generate the critique
+            critique: str = completions_create(
+                client=self.client, messages=reflection_history, model=self.model
+            )
             if "<OK>" in critique or counter == n_steps:
                 return generation
             counter += 1
-            generation_history.append(msg=build_prompt_structure(prompt=critique, role='user'))
-            reflection_history.append(msg=build_prompt_structure(prompt=critique, role='assistant'))
+            generation_history.append(
+                msg=build_prompt_structure(prompt=critique, role="user")
+            )
+            reflection_history.append(
+                msg=build_prompt_structure(prompt=critique, role="assistant")
+            )

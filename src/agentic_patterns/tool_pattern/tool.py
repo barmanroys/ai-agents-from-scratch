@@ -1,8 +1,8 @@
 import json
-from typing import Callable
+from typing import Callable, Any, Dict
 
 
-def get_fn_signature(fn: Callable) -> dict:
+def get_fn_signature(fn: Callable) -> Dict[str, str | Dict]:
     """
     Generates the signature for a given function.
 
@@ -13,12 +13,12 @@ def get_fn_signature(fn: Callable) -> dict:
         dict: A dictionary containing the function's name, description,
               and parameter types.
     """
-    fn_signature: dict = {
+    fn_signature: Dict[str, str | Dict] = {
         "name": fn.__name__,
         "description": fn.__doc__,
         "parameters": {"properties": {}},
     }
-    schema = {
+    schema: Dict = {
         k: {"type": v.__name__} for k, v in fn.__annotations__.items() if k != "return"
     }
     fn_signature["parameters"]["properties"] = schema
@@ -66,14 +66,15 @@ class Tool:
     """
 
     def __init__(self, name: str, fn: Callable, fn_signature: str):
-        self.name = name
-        self.fn = fn
-        self.fn_signature = fn_signature
+        self.name: str = name
+        self.fn: Callable = fn
+        self.fn_signature: str = fn_signature
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """String representation of the object."""
         return self.fn_signature
 
-    def run(self, **kwargs):
+    def run(self, **kwargs) -> Any:
         """
         Executes the tool (function) with provided arguments.
 
@@ -86,7 +87,7 @@ class Tool:
         return self.fn(**kwargs)
 
 
-def tool(fn: Callable):
+def tool(fn: Callable) -> Tool:
     """
     A decorator that wraps a function into a Tool object.
 
@@ -96,11 +97,7 @@ def tool(fn: Callable):
     Returns:
         Tool: A Tool object containing the function, its name, and its signature.
     """
-
-    def wrapper():
-        fn_signature = get_fn_signature(fn)
-        return Tool(
-            name=fn_signature.get("name"), fn=fn, fn_signature=json.dumps(fn_signature)
-        )
-
-    return wrapper()
+    signature: Dict[str, str | Dict] = get_fn_signature(fn=fn)
+    return Tool(
+        name=signature.get("name"), fn=fn, fn_signature=json.dumps(obj=signature)
+    )

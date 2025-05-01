@@ -92,5 +92,7 @@ class FixedFirstChatHistory(ChatHistory):
             msg (str): The message to be added to the queue
         """
         if len(self) == self.total_length:
-            self.pop(1)  # Keep the zero-th message but pop the next one in case of buffer overlow
+            self.pop(
+                1
+            )  # Keep the zero-th message but pop the next one in case of buffer overlow
         super().append(msg)
