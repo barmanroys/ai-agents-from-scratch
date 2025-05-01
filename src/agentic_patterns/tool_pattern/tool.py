@@ -1,3 +1,5 @@
+"""Define the tool class and its factory function."""
+
 import json
 from typing import Callable, Any, Dict
 
