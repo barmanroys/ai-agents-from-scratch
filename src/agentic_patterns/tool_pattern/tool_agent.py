@@ -43,9 +43,9 @@ class ToolAgent:
     """
 
     def __init__(
-            self,
-            tools: Tool | List[Tool],
-            model: str = "llama-3.3-70b-versatile",
+        self,
+        tools: Tool | List[Tool],
+        model: str = "llama-3.3-70b-versatile",
     ) -> None:
         self.client: Groq = Groq()
         self.model: str = model
@@ -83,13 +83,15 @@ class ToolAgent:
             validated_tool_call: Dict[str, str | Dict[str, Any]] = validate_arguments(
                 tool_call=tool_call, tool_signature=json.loads(tool.fn_signature)
             )
-            return validated_tool_call["id"], tool.run(**validated_tool_call["arguments"])
+            return validated_tool_call["id"], tool.run(
+                **validated_tool_call["arguments"]
+            )
 
         return dict(map(process_single_tool, tool_calls_content))
 
     def run(
-            self,
-            user_msg: str,
+        self,
+        user_msg: str,
     ) -> str:
         """
         Handles the full process of interacting with the language model and executing a tool based on user input.
@@ -122,12 +124,23 @@ class ToolAgent:
             ]
         )
 
-        tool_call_response: str = completions_create(client=self.client, messages=tool_chat_history, model=self.model)
-        tool_calls: TagContentResult = extract_tag_content(text=tool_call_response, tag="tool_call")
+        tool_call_response: str = completions_create(
+            client=self.client, messages=tool_chat_history, model=self.model
+        )
+        tool_calls: TagContentResult = extract_tag_content(
+            text=tool_call_response, tag="tool_call"
+        )
         agent_chat_history: List[Dict[str, str]] = ChatHistory([user_prompt])
         if tool_calls.found:
-            observations: Dict[str, Any] = self.process_tool_calls(tool_calls_content=tool_calls.content)
-            agent_chat_history.append(build_prompt_structure(prompt=f'f"Observation: {observations}"',
-                                                             role="user"))
+            observations: Dict[str, Any] = self.process_tool_calls(
+                tool_calls_content=tool_calls.content
+            )
+            agent_chat_history.append(
+                build_prompt_structure(
+                    prompt=f'f"Observation: {observations}"', role="user"
+                )
+            )
 
-        return completions_create(client=self.client, messages=agent_chat_history, model=self.model)
+        return completions_create(
+            client=self.client, messages=agent_chat_history, model=self.model
+        )

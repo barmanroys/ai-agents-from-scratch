@@ -19,13 +19,21 @@ def get_fn_signature(fn: Callable) -> Dict[str, str | Dict]:
     return {
         "name": fn.__name__,
         "description": fn.__doc__,
-        "parameters": {"properties": {{
-            k: {"type": v.__name__} for k, v in fn.__annotations__.items() if k != "return"
-        }}},
+        "parameters": {
+            "properties": {
+                {
+                    k: {"type": v.__name__}
+                    for k, v in fn.__annotations__.items()
+                    if k != "return"
+                }
+            }
+        },
     }
 
 
-def validate_arguments(tool_call: Dict[str, Any], tool_signature: Dict[str, Any]) -> Dict[str, Any]:
+def validate_arguments(
+    tool_call: Dict[str, Any], tool_signature: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Validates and converts arguments in the input dictionary to match the expected types.
 
