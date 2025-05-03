@@ -1,5 +1,6 @@
 """Tool agents implementation."""
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
 from dotenv import load_dotenv
@@ -87,7 +88,8 @@ class ToolAgent:
                 **validated_tool_call["arguments"]
             )
 
-        return dict(map(process_single_tool, tool_calls_content))
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as ex:
+            return dict(ex.map(process_single_tool, tool_calls_content))
 
     def run(
         self,

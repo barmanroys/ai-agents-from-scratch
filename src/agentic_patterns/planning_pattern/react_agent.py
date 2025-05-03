@@ -1,24 +1,27 @@
-import json
-import re
+"""Reflect and act agent implementation"""
 
-from colorama import Fore
+import json
+import os
+from concurrent.futures import ThreadPoolExecutor
+from typing import Tuple
+
 from dotenv import load_dotenv
 from groq import Groq
 
-from agentic_patterns.tool_pattern.tool import Tool
-from agentic_patterns.tool_pattern.tool import validate_arguments
-from agentic_patterns.utils.completions import build_prompt_structure
-from agentic_patterns.utils.completions import ChatHistory
-from agentic_patterns.utils.completions import completions_create
-from agentic_patterns.utils.completions import update_chat_history
-from agentic_patterns.utils.extraction import extract_tag_content
+from tool_pattern.tool import validate_arguments, Tool, Dict, Any
+from utils.completions import (
+    completions_create,
+    build_prompt_structure,
+    ChatHistory,
+    List,
+)
+from utils.extraction import extract_tag_content, TagContentResult
 
 load_dotenv()
 
-BASE_SYSTEM_PROMPT = ""
+BASE_SYSTEM_PROMPT: str = ""
 
-
-REACT_SYSTEM_PROMPT = """
+REACT_SYSTEM_PROMPT: str = """
 You operate by running a loop with the following steps: Thought, Action, Observation.
 You are provided with function signatures within <tools></tools> XML tags.
 You may call one or more functions to assist with the user query. Don' make assumptions about what values to plug
@@ -65,32 +68,32 @@ class ReactAgent:
     Attributes:
         client (Groq): The Groq client used to handle model-based completions.
         model (str): The name of the model used for generating responses. Default is "llama-3.3-70b-versatile".
-        tools (list[Tool]): A list of Tool instances available for execution.
         tools_dict (dict): A dictionary mapping tool names to their corresponding Tool instances.
     """
 
     def __init__(
         self,
-        tools: Tool | list[Tool],
+        tools: Tool | List[Tool],
         model: str = "llama-3.3-70b-versatile",
         system_prompt: str = BASE_SYSTEM_PROMPT,
     ) -> None:
-        self.client = Groq()
-        self.model = model
-        self.system_prompt = system_prompt
-        self.tools = tools if isinstance(tools, list) else [tools]
-        self.tools_dict = {tool.name: tool for tool in self.tools}
+        self.client: Groq = Groq()
+        self.model: str = model
+        self.system_prompt: str = system_prompt
+        inner_tools: List[tools] = tools if isinstance(tools, list) else [tools]
+        self.tools_dict: Dict[str, Tool] = {tool.name: tool for tool in inner_tools}
 
-    def add_tool_signatures(self) -> str:
+    @property
+    def tool_signatures(self) -> str:
         """
         Collects the function signatures of all available tools.
 
         Returns:
             str: A concatenated string of all tool function signatures in JSON format.
         """
-        return "".join([tool.fn_signature for tool in self.tools])
+        return "\n".join(map(lambda tool: tool.fn_signature, self.tools_dict.values()))
 
-    def process_tool_calls(self, tool_calls_content: list) -> dict:
+    def process_tool_calls(self, tool_calls_content: List[str]) -> Dict[str, Any]:
         """
         Processes each tool call, validates arguments, executes the tools, and collects results.
 
@@ -100,27 +103,22 @@ class ReactAgent:
         Returns:
             dict: A dictionary where the keys are tool call IDs and values are the results from the tools.
         """
-        observations = {}
-        for tool_call_str in tool_calls_content:
-            tool_call = json.loads(tool_call_str)
-            tool_name = tool_call["name"]
-            tool = self.tools_dict[tool_name]
 
-            print(Fore.GREEN + f"\nUsing Tool: {tool_name}")
-
+        def process_single_tool(tool_call_str: str) -> Tuple[str, Any]:
+            """Perform a single tool call."""
+            tool_call: Dict[str, Any] = json.loads(s=tool_call_str)
+            tool_name: str = tool_call["name"]
+            tool: Tool = self.tools_dict[tool_name]
             # Validate and execute the tool call
-            validated_tool_call = validate_arguments(
-                tool_call, json.loads(tool.fn_signature)
+            validated_tool_call: Dict[str, str | Dict[str, Any]] = validate_arguments(
+                tool_call=tool_call, tool_signature=json.loads(tool.fn_signature)
             )
-            print(Fore.GREEN + f"\nTool call dict: \n{validated_tool_call}")
+            return validated_tool_call["id"], tool.run(
+                **validated_tool_call["arguments"]
+            )
 
-            result = tool.run(**validated_tool_call["arguments"])
-            print(Fore.GREEN + f"\nTool result: \n{result}")
-
-            # Store the result using the tool call ID
-            observations[validated_tool_call["id"]] = result
-
-        return observations
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as ex:
+            return dict(ex.map(process_single_tool, tool_calls_content))
 
     def run(
         self,
@@ -134,18 +132,16 @@ class ReactAgent:
 
         Args:
             user_msg (str): The user's input message to start the interaction.
-            max_rounds (int, optional): Maximum number of interaction rounds the agent should perform. Default is 10.
+            max_rounds (int): Maximum number of interaction rounds the agent should perform. Default is 10.
 
         Returns:
             str: The final response generated by the agent after processing user input and any tool calls.
         """
-        user_prompt = build_prompt_structure(
+        user_prompt: Dict[str, str] = build_prompt_structure(
             prompt=user_msg, role="user", tag="question"
         )
-        if self.tools:
-            self.system_prompt += (
-                "\n" + REACT_SYSTEM_PROMPT % self.add_tool_signatures()
-            )
+        if self.tools_dict:
+            self.system_prompt += "\n" + REACT_SYSTEM_PROMPT % self.tool_signatures
 
         chat_history = ChatHistory(
             [
@@ -157,25 +153,35 @@ class ReactAgent:
             ]
         )
 
-        if self.tools:
+        if self.tools_dict:
             # Run the ReAct loop for max_rounds
             for _ in range(max_rounds):
-                completion = completions_create(self.client, chat_history, self.model)
+                completion: str = completions_create(
+                    self.client, chat_history, self.model
+                )
 
-                response = extract_tag_content(str(completion), "response")
+                response: TagContentResult = extract_tag_content(
+                    text=str(completion), tag="response"
+                )
                 if response.found:
                     return response.content[0]
 
-                thought = extract_tag_content(str(completion), "thought")
-                tool_calls = extract_tag_content(str(completion), "tool_call")
+                tool_calls: TagContentResult = extract_tag_content(
+                    text=str(completion), tag="tool_call"
+                )
 
-                update_chat_history(chat_history, completion, "assistant")
-
-                print(Fore.MAGENTA + f"\nThought: {thought.content[0]}")
+                chat_history.append(
+                    msg=build_prompt_structure(prompt=completion, role="assistant")
+                )
 
                 if tool_calls.found:
-                    observations = self.process_tool_calls(tool_calls.content)
-                    print(Fore.BLUE + f"\nObservations: {observations}")
-                    update_chat_history(chat_history, f"{observations}", "user")
+                    observations: Dict[str, Any] = self.process_tool_calls(
+                        tool_calls_content=tool_calls.content
+                    )
+                    chat_history.append(
+                        build_prompt_structure(prompt=f"{observations}", role="user")
+                    )
 
-        return completions_create(self.client, chat_history, self.model)
+        return completions_create(
+            client=self.client, messages=chat_history, model=self.model
+        )
