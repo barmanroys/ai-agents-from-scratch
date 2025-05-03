@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -12,7 +13,7 @@ class TagContentResult:
         found (bool): A flag indicating whether any content was found for the given tag.
     """
 
-    content: list[str]
+    content: List[str]
     found: bool
 
 
@@ -23,17 +24,12 @@ def extract_tag_content(text: str, tag: str) -> TagContentResult:
     Parameters:
         text (str): The input string containing multiple potential tags.
         tag (str): The name of the tag to search for (e.g., 'thought', 'response').
-
-    Returns:
-        dict: A dictionary with the following keys:
-            - 'content' (list): A list of strings containing the content found between the specified tags.
-            - 'found' (bool): A flag indicating whether any content was found for the given tag.
     """
     # Build the regex pattern dynamically to find multiple occurrences of the tag
     tag_pattern = rf"<{tag}>(.*?)</{tag}>"
 
     # Use findall to capture all content between the specified tag
-    matched_contents = re.findall(tag_pattern, text, re.DOTALL)
+    matched_contents = re.findall(pattern=tag_pattern, string=text, flags=re.DOTALL)
 
     # Return the dataclass instance with the result
     return TagContentResult(

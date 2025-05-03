@@ -1,12 +1,11 @@
 """Tool agents implementation."""
 
-import json
-from typing import List
+from typing import List, Tuple
 
 from dotenv import load_dotenv
 from groq import Groq
 
-from tool import validate_arguments, Tool, Dict, Any
+from tool import validate_arguments, Tool, Dict, Any, json
 from utils.completions import completions_create, build_prompt_structure, ChatHistory
 from utils.extraction import extract_tag_content, TagContentResult
 
@@ -33,37 +32,38 @@ Here are the available tools:
 
 class ToolAgent:
     """
-    The ToolAgent class represents an agent that can interact with a language model and use tools
+    This class represents an agent that can interact with a language model and use tools
     to assist with user queries. It generates function calls based on user input, validates arguments,
     and runs the respective tools.
 
     Attributes:
-        tools (Tool | list[Tool]): A list of tools available to the agent.
         model (str): The model to be used for generating tool calls and responses.
         client (Groq): The Groq client used to interact with the language model.
         tools_dict (dict): A dictionary mapping tool names to their corresponding Tool objects.
     """
 
     def __init__(
-        self,
-        tools: Tool | List[Tool],
-        model: str = "llama-3.3-70b-versatile",
+            self,
+            tools: Tool | List[Tool],
+            model: str = "llama-3.3-70b-versatile",
     ) -> None:
         self.client: Groq = Groq()
         self.model: str = model
-        self.tools: List[Tool] = tools if isinstance(tools, list) else [tools]
-        self.tools_dict: Dict[str, Tool] = {tool.name: tool for tool in self.tools}
+        inner_tools: List[Tool] = tools if isinstance(tools, List) else [tools]
+        self.tools_dict: Dict[str, Tool] = {tool.name: tool for tool in inner_tools}
 
-    def add_tool_signatures(self) -> str:
+    @property
+    def tool_signatures(self) -> str:
         """
         Collects the function signatures of all available tools.
 
         Returns:
             str: A concatenated string of all tool function signatures in JSON format.
         """
-        return "".join([tool.fn_signature for tool in self.tools])
 
-    def process_tool_calls(self, tool_calls_content: list) -> Dict[str, Any]:
+        return "\n".join(map(lambda tool: tool.fn_signature, self.tools_dict.values()))
+
+    def process_tool_calls(self, tool_calls_content: List[str]) -> Dict[str, Any]:
         """
         Processes each tool call, validates arguments, executes the tools, and collects results.
 
@@ -73,26 +73,23 @@ class ToolAgent:
         Returns:
             dict: A dictionary where the keys are tool call IDs and values are the results from the tools.
         """
-        observations: Dict[str, Any] = {}
-        for tool_call_str in tool_calls_content:
-            tool_call: Dict = json.loads(tool_call_str)
+
+        def process_single_tool(tool_call_str: str) -> Tuple[str, Any]:
+            """Perform a single tool call."""
+            tool_call: Dict[str, Any] = json.loads(s=tool_call_str)
             tool_name: str = tool_call["name"]
             tool: Tool = self.tools_dict[tool_name]
-
             # Validate and execute the tool call
-            validated_tool_call = validate_arguments(
+            validated_tool_call: Dict[str, str | Dict[str, Any]] = validate_arguments(
                 tool_call=tool_call, tool_signature=json.loads(tool.fn_signature)
             )
-            # Store the result using the tool call ID
-            observations[validated_tool_call["id"]] = tool.run(
-                **validated_tool_call["arguments"]
-            )
+            return validated_tool_call["id"], tool.run(**validated_tool_call["arguments"])
 
-        return observations
+        return dict(map(process_single_tool, tool_calls_content))
 
     def run(
-        self,
-        user_msg: str,
+            self,
+            user_msg: str,
     ) -> str:
         """
         Handles the full process of interacting with the language model and executing a tool based on user input.
@@ -103,6 +100,14 @@ class ToolAgent:
         Returns:
             str: The final output after executing the tool and generating a response from the model.
         """
+
+        # Steps
+        # Ask the LLM for which tools to use, with what arguments. Get the result in a structured format.
+        # Parse the LLM result to see if there is a tool calling
+        # Call the tool and get the result.
+        # To the LLM, pass the original user prompt (the question) and then the observation (tool call results)
+        # as parts of the same API call
+
         user_prompt: Dict[str, str] = build_prompt_structure(
             prompt=user_msg, role="user"
         )
@@ -110,26 +115,19 @@ class ToolAgent:
         tool_chat_history: List[Dict[str, str]] = ChatHistory(
             [
                 build_prompt_structure(
-                    prompt=TOOL_SYSTEM_PROMPT % self.add_tool_signatures(),
+                    prompt=TOOL_SYSTEM_PROMPT % self.tool_signatures,
                     role="system",
                 ),
                 user_prompt,
             ]
         )
+
+        tool_call_response: str = completions_create(client=self.client, messages=tool_chat_history, model=self.model)
+        tool_calls: TagContentResult = extract_tag_content(text=tool_call_response, tag="tool_call")
         agent_chat_history: List[Dict[str, str]] = ChatHistory([user_prompt])
-
-        tool_call_response: str = completions_create(
-            self.client, messages=tool_chat_history, model=self.model
-        )
-        tool_calls: TagContentResult = extract_tag_content(
-            text=str(tool_call_response), tag="tool_call"
-        )
-
         if tool_calls.found:
-            observations: Dict[str, Any] = self.process_tool_calls(tool_calls.content)
-            agent_chat_history.append(
-                build_prompt_structure(
-                    prompt=f'f"Observation: {observations}"', role="user"
-                )
-            )
-        return completions_create(self.client, agent_chat_history, self.model)
+            observations: Dict[str, Any] = self.process_tool_calls(tool_calls_content=tool_calls.content)
+            agent_chat_history.append(build_prompt_structure(prompt=f'f"Observation: {observations}"',
+                                                             role="user"))
+
+        return completions_create(client=self.client, messages=agent_chat_history, model=self.model)

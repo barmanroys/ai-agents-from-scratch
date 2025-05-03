@@ -286,6 +286,8 @@ cython_debug/
 **uv.lock
 notebooks/*.ipynb
 **.ipynb_checkpoints
+src/agentic_patterns/tool_pattern/**.ipynb
+src/agentic_patterns/**.ipynb_checkpoints
 
 
 ### Python Patch ###

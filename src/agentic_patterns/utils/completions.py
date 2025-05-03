@@ -5,7 +5,7 @@ from typing import List, Optional, Dict
 from groq import Groq
 
 
-def completions_create(client: Groq, messages: list, model: str) -> str:
+def completions_create(client: Groq, messages: List[Dict[str, str]], model: str) -> str:
     """
     Sends a request to the client's `completions.create` method to interact with the language model.
 

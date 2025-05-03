@@ -15,19 +15,17 @@ def get_fn_signature(fn: Callable) -> Dict[str, str | Dict]:
         dict: A dictionary containing the function's name, description,
               and parameter types.
     """
-    fn_signature: Dict[str, str | Dict] = {
+    # noinspection PyUnresolvedReferences
+    return {
         "name": fn.__name__,
         "description": fn.__doc__,
-        "parameters": {"properties": {}},
+        "parameters": {"properties": {{
+            k: {"type": v.__name__} for k, v in fn.__annotations__.items() if k != "return"
+        }}},
     }
-    schema: Dict = {
-        k: {"type": v.__name__} for k, v in fn.__annotations__.items() if k != "return"
-    }
-    fn_signature["parameters"]["properties"] = schema
-    return fn_signature
 
 
-def validate_arguments(tool_call: dict, tool_signature: dict) -> dict:
+def validate_arguments(tool_call: Dict[str, Any], tool_signature: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validates and converts arguments in the input dictionary to match the expected types.
 
@@ -41,7 +39,7 @@ def validate_arguments(tool_call: dict, tool_signature: dict) -> dict:
     properties = tool_signature["parameters"]["properties"]
 
     # TODO: This is overly simplified but enough for simple Tools.
-    type_mapping = {
+    type_mapping: Dict[str, type] = {
         "int": int,
         "str": str,
         "bool": bool,
@@ -67,10 +65,10 @@ class Tool:
         fn_signature (str): JSON string representation of the function's signature.
     """
 
-    def __init__(self, name: str, fn: Callable, fn_signature: str):
+    def __init__(self, name: str, fn: Callable):
         self.name: str = name
         self.fn: Callable = fn
-        self.fn_signature: str = fn_signature
+        self.fn_signature: str = json.dumps(obj=get_fn_signature(fn=self.fn))
 
     def __str__(self) -> str:
         """String representation of the object."""
