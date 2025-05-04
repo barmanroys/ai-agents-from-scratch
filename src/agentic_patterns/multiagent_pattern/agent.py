@@ -1,8 +1,11 @@
-from textwrap import dedent
+"""Implementation of multiagent."""
 
-from agentic_patterns.multiagent_pattern.crew import Crew
-from agentic_patterns.planning_pattern.react_agent import ReactAgent
-from agentic_patterns.tool_pattern.tool import Tool
+from textwrap import dedent
+from typing import List
+
+from crew import Crew
+from planning_pattern.react_agent import ReactAgent
+from tool_pattern.tool import Tool
 
 
 class Agent:
@@ -32,29 +35,29 @@ class Agent:
     """
 
     def __init__(
-        self,
-        name: str,
-        backstory: str,
-        task_description: str,
-        task_expected_output: str = "",
-        tools: list[Tool] | None = None,
-        llm: str = "llama-3.3-70b-versatile",
+            self,
+            name: str,
+            backstory: str,
+            task_description: str,
+            task_expected_output: str = "",
+            tools: list[Tool] | None = None,
+            llm: str = "llama-3.3-70b-versatile",
     ):
-        self.name = name
-        self.backstory = backstory
-        self.task_description = task_description
-        self.task_expected_output = task_expected_output
-        self.react_agent = ReactAgent(
+        self.name: str = name
+        self.backstory: str = backstory
+        self.task_description: str = task_description
+        self.task_expected_output: str = task_expected_output
+        self.react_agent: ReactAgent = ReactAgent(
             model=llm, system_prompt=self.backstory, tools=tools or []
         )
 
-        self.dependencies: list[Agent] = []  # Agents that this agent depends on
-        self.dependents: list[Agent] = []  # Agents that depend on this agent
+        self.dependencies: List[Agent] = []  # Agents that this agent depends on
+        self.dependents: List[Agent] = []  # Agents that depend on this agent
 
-        self.context = ""
+        self.context: str = ""
 
         # Automatically register this agent to the active Crew context if one exists
-        Crew.register_agent(self)
+        Crew.register_agent(agent=self)
 
     def __repr__(self):
         return f"{self.name}"
@@ -162,8 +165,8 @@ class Agent:
         Returns:
             str: The formatted prompt string.
         """
-        prompt = dedent(
-            f"""
+        prompt = dedent(text=
+                        f"""
         You are an AI agent. You are part of a team of agents working together to complete a task.
         I'm going to give you the task description enclosed in <task_description></task_description> tags. I'll also give
         you the available context from the other agents in <context></context> tags. If the context
@@ -187,7 +190,7 @@ class Agent:
 
         Your response:
         """
-        ).strip()
+                        ).strip()
 
         return prompt
 

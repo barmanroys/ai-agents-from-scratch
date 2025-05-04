@@ -19,12 +19,10 @@ from utils.extraction import extract_tag_content, TagContentResult
 
 load_dotenv()
 
-BASE_SYSTEM_PROMPT: str = ""
-
 REACT_SYSTEM_PROMPT: str = """
 You operate by running a loop with the following steps: Thought, Action, Observation.
 You are provided with function signatures within <tools></tools> XML tags.
-You may call one or more functions to assist with the user query. Don' make assumptions about what values to plug
+You may call one or more functions to assist with the user query. Don't make assumptions about what values to plug
 into functions. Pay special attention to the properties 'types'. You should use those types as in a Python dict.
 
 For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags as follows:
@@ -72,10 +70,10 @@ class ReactAgent:
     """
 
     def __init__(
-        self,
-        tools: Tool | List[Tool],
-        model: str = "llama-3.3-70b-versatile",
-        system_prompt: str = BASE_SYSTEM_PROMPT,
+            self,
+            tools: Tool | List[Tool],
+            model: str = "llama-3.3-70b-versatile",
+            system_prompt: str = '',
     ) -> None:
         self.client: Groq = Groq()
         self.model: str = model
@@ -111,7 +109,7 @@ class ReactAgent:
             tool: Tool = self.tools_dict[tool_name]
             # Validate and execute the tool call
             validated_tool_call: Dict[str, str | Dict[str, Any]] = validate_arguments(
-                tool_call=tool_call, tool_signature=json.loads(tool.fn_signature)
+                tool_call=tool_call, tool_signature=json.loads(s=tool.fn_signature)
             )
             return validated_tool_call["id"], tool.run(
                 **validated_tool_call["arguments"]
@@ -121,9 +119,9 @@ class ReactAgent:
             return dict(ex.map(process_single_tool, tool_calls_content))
 
     def run(
-        self,
-        user_msg: str,
-        max_rounds: int = 10,
+            self,
+            user_msg: str,
+            max_rounds: int = 10,
     ) -> str:
         """
         Executes a user interaction session, where the agent processes user input, generates responses,
@@ -154,7 +152,7 @@ class ReactAgent:
         )
 
         if self.tools_dict:
-            # Run the ReAct loop for max_rounds
+            # Run the ReAct loop for max_rounds if the tool collection is not empty
             for _ in range(max_rounds):
                 completion: str = completions_create(
                     self.client, chat_history, self.model
@@ -165,22 +163,16 @@ class ReactAgent:
                 )
                 if response.found:
                     return response.content[0]
-
                 tool_calls: TagContentResult = extract_tag_content(
                     text=str(completion), tag="tool_call"
                 )
-
-                chat_history.append(
-                    msg=build_prompt_structure(prompt=completion, role="assistant")
-                )
-
+                chat_history.append(msg=build_prompt_structure(prompt=completion, role="assistant"))
                 if tool_calls.found:
                     observations: Dict[str, Any] = self.process_tool_calls(
                         tool_calls_content=tool_calls.content
                     )
-                    chat_history.append(
-                        build_prompt_structure(prompt=f"{observations}", role="user")
-                    )
+                    chat_history.append(msg=build_prompt_structure(prompt=f"{observations}", role="user")
+                                        )
 
         return completions_create(
             client=self.client, messages=chat_history, model=self.model

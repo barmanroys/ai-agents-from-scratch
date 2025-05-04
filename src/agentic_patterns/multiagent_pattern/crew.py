@@ -1,12 +1,11 @@
+"""Implement the queue"""
+
 from collections import deque
-
-from colorama import Fore
-from graphviz import Digraph  # type: ignore
-
-from agentic_patterns.utils.logging import fancy_print
+from contextlib import AbstractContextManager
+from typing import List
 
 
-class Crew:
+class Crew(AbstractContextManager):
     """
     A class representing a crew of agents working together.
 
@@ -21,7 +20,7 @@ class Crew:
     current_crew = None
 
     def __init__(self):
-        self.agents = []
+        self.agents: List = []
 
     def __enter__(self):
         """
@@ -95,29 +94,10 @@ class Crew:
 
         return sorted_agents
 
-    def plot(self):
-        """
-        Plots the Directed Acyclic Graph (DAG) of agents in the crew using Graphviz.
-
-        Returns:
-            Digraph: A Graphviz Digraph object representing the agent dependencies.
-        """
-        dot = Digraph(format="png")  # Set format to PNG for inline display
-
-        # Add nodes and edges for each agent in the crew
-        for agent in self.agents:
-            dot.node(agent.name)
-            for dependency in agent.dependencies:
-                dot.edge(dependency.name, agent.name)
-        return dot
-
     def run(self):
         """
         Runs all agents in the crew in topologically sorted order.
 
         This method executes each agent's run method and prints the results.
         """
-        sorted_agents = self.topological_sort()
-        for agent in sorted_agents:
-            fancy_print(f"RUNNING AGENT: {agent}")
-            print(Fore.RED + f"{agent.run()}")
+        self.topological_sort()
